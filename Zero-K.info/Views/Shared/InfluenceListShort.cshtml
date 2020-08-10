@@ -3,7 +3,7 @@
 
 <table>
 
-    @foreach (var facGroup in Model.Where(x=>x.Influence > 0).OrderByDescending(g => g.Influence))
+    @foreach (var facGroup in Model.OrderByDescending(g => g.Influence))
     {
         <tr>
             <td>
