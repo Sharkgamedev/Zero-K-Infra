@@ -8,7 +8,7 @@
         function drawChart() {
             var data = google.visualization.arrayToDataTable([
                 ['Faction', 'Influence'],
-                @foreach (var fac in Model.Where(x=>x.Influence > 0).OrderByDescending(x=>x.Influence)) {
+                @foreach (var fac in Model.OrderByDescending(x=>x.Influence)) {
                     <text>['@fac.Faction.Name', @fac.Influence],</text>
                 }
             ['Neutral', @(GlobalConst.PlanetWarsMaximumIP - (Model.Sum(x=>(double?)x.Influence)??0))]
@@ -19,14 +19,14 @@
                 chartArea : {left:0,top:0,width:"100%", height:"100%"},
                 legend : {position:'none'},
                 colors: [
-                    
-                    @foreach (var fac in Model.Where(x=>x.Influence > 0).OrderByDescending(x=>x.Influence)) {
+
+                    @foreach (var fac in Model.OrderByDescending(x=>x.Influence)) {
                         <text>'@fac.Faction.Color',</text>
                     }
-                
+
             '#808080'
         ]
-            
+
         };
 
         var chart = new google.visualization.PieChart(document.getElementById('chart_div'));
@@ -37,7 +37,7 @@
 <div id="chart_div" style="width: 200px; height: 200px; float:left"></div>    
 
 <table>
-    @foreach (var facGroup in Model.Where(x=>x.Influence > 0).OrderByDescending(g => g.Influence))
+    @foreach (var facGroup in Model.OrderByDescending(g => g.Influence))
     {
         <tr>
             <td>
