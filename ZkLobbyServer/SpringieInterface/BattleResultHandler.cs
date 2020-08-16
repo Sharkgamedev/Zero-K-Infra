@@ -167,7 +167,7 @@ namespace ZeroKWeb.SpringieInterface
                 if (winNum > 1) winNum = null;
             }
 
-            PlanetWarsTurnHandler.EndTurn(result.LobbyStartContext.Map,
+            /*PlanetWarsTurnHandler.EndTurn(result.LobbyStartContext.Map,
                 result.OutputExtras,
                 db,
                 winNum,
@@ -175,6 +175,16 @@ namespace ZeroKWeb.SpringieInterface
                 text,
                 sb,
                 sb.SpringBattlePlayers.Where(x => !x.IsSpectator && x.AllyNumber == 0).Select(x => x.Account).ToList(),
+                server.PlanetWarsEventCreator, server);*/
+
+            PlanetWarsTurnHandler.ResolveBattleOutcome(result.LobbyStartContext.Map,
+                result.OutputExtras,
+                db,
+                winNum,
+                sb.SpringBattlePlayers.Where(x => !x.IsSpectator).Select(x => x.Account).ToList(),
+                sb.SpringBattlePlayers.Where(x => !x.IsSpectator && x.AllyNumber == 0).Select(x => x.Account).ToList(),
+                text,
+                sb,
                 server.PlanetWarsEventCreator, server);
 
             server.PlanetWarsMatchMaker.RemoveFromRunningBattles(result.LobbyStartContext.BattleID);

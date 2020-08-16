@@ -389,7 +389,7 @@ namespace ZeroKWeb
                 var db = new ZkDataContext();
                 var playerIds = option.Attackers.Select(x => x).Union(option.Defenders.Select(x => x)).ToList();
 
-                PlanetWarsTurnHandler.EndTurn(option.Map,
+                /*PlanetWarsTurnHandler.EndTurn(option.Map,
                     null,
                     db,
                     0,
@@ -397,6 +397,15 @@ namespace ZeroKWeb
                     text,
                     null,
                     db.Accounts.Where(x => option.Attackers.Contains(x.Name) && (x.Faction != null)).ToList(),
+                    server.PlanetWarsEventCreator, server);*/
+                PlanetWarsTurnHandler.ResolveBattleOutcome(option.Map,
+                    null,
+                    db,
+                    0,
+                    db.Accounts.Where(x => playerIds.Contains(x.Name) && (x.Faction != null)).ToList(),
+                    db.Accounts.Where(x => option.Attackers.Contains(x.Name) && (x.Faction != null)).ToList(),
+                    text,
+                    null,
                     server.PlanetWarsEventCreator, server);
             }
             catch (Exception ex)
@@ -502,6 +511,9 @@ namespace ZeroKWeb
                 }
 
                 if (MiscVar.PlanetWarsMode != PlanetWarsModes.Running) return;
+
+                // Some sort of battle timer
+                // PlanetWarsTurnHandler.UpdateEconomy(new ZkDataContext(), server.PlanetWarsEventCreator);
 
                 if (Challenge == null)
                 {

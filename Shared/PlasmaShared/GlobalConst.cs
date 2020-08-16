@@ -43,7 +43,7 @@ namespace ZkData
             switch (newMode) {
                 case ModeType.Local:
                     BaseSiteUrl = "http://localhost:9739";
-                    ZkDataContextConnectionString = @"Data Source=(LocalDb)\MSSQLLocalDB;Initial Catalog=zero-k_local;Integrated Security=True;MultipleActiveResultSets=true;Min Pool Size=5;Max Pool Size=2000";
+                    ZkDataContextConnectionString = @"Data Source=NEPTUNEX\SQLEXPRESS;Initial Catalog=zero-k_local;Integrated Security=True;MultipleActiveResultSets=true;Min Pool Size=5;Max Pool Size=2000";
 
                     LobbyServerHost = "localhost";
                     LobbyServerPort = 8200;
@@ -132,7 +132,7 @@ namespace ZkData
         public const int NumCommanderLevels = 5;
         public const int MaxCommanderNameLength = 20;
 
-        public const string DefaultEngineOverride = "104.0.1-287-gf7b0fcc"; // hack for ZKL using tasclient's engine - override here for missions etc
+        public const string DefaultEngineOverride = "104.0.1-1544-ge1f249f"; // hack for ZKL using tasclient's engine - override here for missions etc
 
         public const int MinDurationForXP = 240;    // seconds
         public const int MinDurationForElo = 60;
@@ -181,16 +181,19 @@ namespace ZkData
         public const double PlanetMetalPerTurn = 1;
         public const double PlanetWarsEnergyToMetalRatio = 0.0;
         public const double PlanetWarsMaximumIP = 100.0; //maximum IP on each planet
+        public const double PlanetWarsBreakthroughIP = 50.0;
+
         public const int PlanetWarsVictoryPointsToWin = 100;
         public const int VictoryPointDecay = 1;
-        public const int BaseInfluencePerBattle = 35;
+        public const int BaseInfluencePerBattle = 51;
         public const double PlanetWarsAttackerMetal = 100;
         public const double PlanetWarsDefenderMetal = 100;
         public const int InfluencePerShip = 1;
         public const double InfluencePerTech = 1;
         public const double InfluenceDecay = 1;
-        public const double InfluenceToCapturePlanet = PlanetWarsMaximumIP / 2 + 0.1;
-        public const double InfluenceToLosePlanet = 10;
+        public const double InfluenceToCapturePlanet = PlanetWarsMaximumIP-0.1;
+        public const double InfluenceToLosePlanet = PlanetWarsMaximumIP-0.9;
+        public const double BreakthroughInfluence = 50;
         public const double DropshipsForFullWarpIPGain = 10;
         public const double SelfDestructRefund = 0.5;
         public const double BomberKillStructureChance = 0.1;
@@ -229,13 +232,14 @@ namespace ZkData
         public const int MinNetKarmaToVote = -30;
         public const int PostVoteHideThreshold = -6;
         public const bool OnlyAdminsSeePostVoters = false;
-        public const int PlanetWarsMinutesToAttackIfNoOption = 2;
-        public const int PlanetWarsMinutesToAttack = 20;
-        public const int PlanetWarsMinutesToAccept = 5;
+        public const int PlanetWarsMinutesToAttackIfNoOption = 1;
+        public const int PlanetWarsMinutesToAttack = 1;
+        public const int PlanetWarsMinutesToAccept = 1;
         public const int PlanetWarsDropshipsStayForMinutes = 2*60;
         public const int PlanetWarsMaxTeamsize = 4;
         public const double PlanetWarsDefenderWinKillCcMultiplier = 0.2;
         public const double PlanetWarsAttackerWinLoseCcMultiplier = 0.5;
+        public const double PlanetWarsLostCcMultiplier = 0.5;
         public const int MinPlanetWarsLevel = 5;
         public const int MinPlanetWarsElo = -1000;
 
