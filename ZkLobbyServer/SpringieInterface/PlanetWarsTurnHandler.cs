@@ -10,6 +10,25 @@ using ZkData;
 
 public static class PlanetWarsTurnHandler
 {
+    public static List<Faction> GetContestingFactions(Planet p1)
+    {
+        List<Faction> l = new List<Faction>();
+        foreach (Link link in p1.LinksByPlanetID1.Union(p1.LinksByPlanetID2).ToList())
+        {
+            Planet otherPlanet = link.PlanetID1 == p1.PlanetID ? link.PlanetByPlanetID2 : link.PlanetByPlanetID1;
+            if (otherPlanet.PlanetFactions.FirstOrDefault().Influence == GlobalConst.PlanetWarsMaximumIP && !l.Contains(otherPlanet.PlanetFactions.FirstOrDefault().Faction))
+            {
+                l.Add(otherPlanet.PlanetFactions.FirstOrDefault().Faction); 
+            }
+            
+        }
+        PlanetFaction currentDominant = p1.PlanetFactions.FirstOrDefault();
+        if (!l.Contains(currentDominant.Faction) && currentDominant.Influence > 0)
+        {
+            l.Add(currentDominant.Faction);
+        }
+        return l;
+    }
 
     /// <summary>
     /// Process planet wars turn
@@ -17,10 +36,315 @@ public static class PlanetWarsTurnHandler
     /// <param name="mapName"></param>
     /// <param name="extraData"></param>
     /// <param name="db"></param>
-    /// <param name="winNum">0 = attacker wins, 1 = defender wins</param>
+    /// <param name="winnerSide">0 = first team wins, 1 = second team wins</param>
     /// <param name="players"></param>
     /// <param name="text"></param>
     /// <param name="sb"></param>
+    /// 
+    public static void ResolveBattleOutcome(string mapName, List<string> extraData, ZkDataContext db, int? winnerSide, List<Account> players, List<Account> firstSidePlayers, StringBuilder text, SpringBattle sb, IPlanetwarsEventCreator eventCreator, ZkLobbyServer.ZkLobbyServer server)
+    {
+        if (extraData == null) extraData = new List<string>();
+        Galaxy gal = db.Galaxies.Single(x => x.IsDefault);
+        Planet planet = gal.Planets.Single(x => x.Resource.InternalName == mapName);
+        var hqStructure = db.StructureTypes.FirstOrDefault(x => x.EffectDisconnectedMetalMalus != null || x.EffectDistanceMetalBonusMax != null);
+
+        text.AppendFormat("Battle on {1}/PlanetWars/Planet/{0} has ended\n", planet.PlanetID, GlobalConst.BaseSiteUrl);
+
+        bool firstFactionWon;
+        bool wasFirstCcDestroyed = false;
+        bool wasSecondCcDestroyed = false;
+
+        if (winnerSide != null)
+        {
+            if (winnerSide == 0) firstFactionWon = true;
+            else firstFactionWon = false;
+
+            wasFirstCcDestroyed = extraData.Any(x => x.StartsWith("hqkilled,0"));
+            wasSecondCcDestroyed = extraData.Any(x => x.StartsWith("hqkilled,1"));
+        }
+        else
+        {
+            text.AppendFormat("No winner on this battle!");
+            Trace.TraceError("PW battle without a winner {0}", sb != null ? sb.SpringBattleID : (int?)null);
+            return;
+        }
+
+        Faction firstFaction = firstSidePlayers.Where(x => x.Faction != null).Select(x => x.Faction).First();
+        var secondSidePlayers = players.Where(x => x.FactionID != firstFaction.FactionID && x.FactionID != null).ToList();
+        Faction secondFaction = null;
+        if (secondSidePlayers.Any())
+        {
+            secondFaction = secondSidePlayers.Where(x => x.Faction != null).Select(x => x.Faction).First();
+        }
+
+        Faction winningFaction;
+        Faction losingFaction;
+        bool ccDestroyed = false;
+        if (firstFactionWon)
+        {
+            winningFaction = firstFaction;
+            losingFaction = secondFaction;
+            ccDestroyed = wasFirstCcDestroyed;
+        }
+        else
+        {
+            winningFaction = secondFaction;
+            losingFaction = firstFaction;
+            ccDestroyed = wasSecondCcDestroyed;
+        }
+
+        if (winningFaction == null)
+        {
+            text.AppendFormat("Winning team had no players!");
+            Trace.TraceError("PW battle where the winner had no players!", sb != null ? sb.SpringBattleID : (int?)null);
+            return;
+        }
+
+        double baseInfluence = GlobalConst.BaseInfluencePerBattle;
+        double influenceChange = baseInfluence;
+        double loserInfluence = 0;
+        double ipMultiplier = 1;
+
+        string influenceReport = "";
+        string ipReason;
+
+        bool reducedEnemyInfluence = false;
+        bool flippedDominance = false;
+        bool planetConquered = false;
+
+        if (ccDestroyed)
+        {
+            ipMultiplier = GlobalConst.PlanetWarsLostCcMultiplier;
+            ipReason = "due to winning but losing Command Centre";
+        }
+        else
+        {
+            ipReason = "due to winning flawlessly";
+        }
+
+        
+        influenceChange = (influenceChange ) * ipMultiplier;
+        if (influenceChange < 0) influenceChange = 0;
+        influenceChange = Math.Floor(influenceChange * 100) / 100;
+
+        PlanetFaction entry = planet.PlanetFactions.FirstOrDefault();
+        if (entry == null)
+        {
+            entry = new PlanetFaction { Faction = winningFaction, Planet = planet, };
+            planet.PlanetFactions.Add(entry);
+        }
+        // if non-winner currently dominates planet
+        if (entry.Faction != winningFaction)
+        {
+            loserInfluence = entry.Influence;
+
+            // if win is insufficient to change this
+            if (loserInfluence >= influenceChange)
+            {
+                reducedEnemyInfluence = true;
+                entry.Influence -= influenceChange;
+            }
+            else // flip dominance
+            {
+                flippedDominance = true;
+                planet.PlanetFactions.Remove(entry);
+                entry = new PlanetFaction { Faction = winningFaction, Planet = planet, };
+                planet.PlanetFactions.Add(entry);
+                entry.Influence += (influenceChange - loserInfluence);
+
+                if (entry.Influence >= GlobalConst.PlanetWarsMaximumIP)
+                {
+                    entry.Influence = GlobalConst.PlanetWarsMaximumIP;
+                    planetConquered = true;
+                }
+            }
+        }
+        else // increase winner's existing dominance
+        {
+            if (entry.Influence < GlobalConst.PlanetWarsMaximumIP)
+            {
+                entry.Influence += influenceChange;
+                if (entry.Influence >= GlobalConst.PlanetWarsMaximumIP)
+                {
+                    entry.Influence = GlobalConst.PlanetWarsMaximumIP;
+                    planetConquered = true;
+                }
+            }
+        }
+
+        string contestReport = "";
+        int newContested = 0;
+        if (planetConquered)
+        {
+            foreach (Link link in planet.LinksByPlanetID1.Union(planet.LinksByPlanetID2).ToList())
+            {
+                Planet otherPlanet = link.PlanetID1 == planet.PlanetID ? link.PlanetByPlanetID2 : link.PlanetByPlanetID1;
+                PlanetFaction otherPlanetFaction = otherPlanet.PlanetFactions.FirstOrDefault();
+
+                if (otherPlanetFaction.Faction != winningFaction && otherPlanetFaction.Influence > GlobalConst.BreakthroughInfluence)
+                {
+                    otherPlanetFaction.Influence = GlobalConst.BreakthroughInfluence;
+                    if (newContested > 0) { contestReport += ", "; }
+                    contestReport += otherPlanet.Name;
+                    newContested++;
+                }
+            }
+        }
+        if (newContested > 0)
+        {
+            contestReport = "Adjacent planets now contested: " + contestReport + ".";
+        }
+
+        // Check all planets to see if they are contested by a single faction
+        string controlReport = "";
+        int newControlled = 0;
+        foreach (Planet p1 in gal.Planets)
+        {
+            List<Faction> l = GetContestingFactions(p1);
+
+            if (l.Count() == 1)
+            {
+                Faction f = l.FirstOrDefault(); // this faction should be made dominant if it is not already
+                PlanetFaction cEntry = p1.PlanetFactions.FirstOrDefault();
+                if (cEntry.Faction != f)
+                {
+                    p1.PlanetFactions.Remove(cEntry);
+                    cEntry = new PlanetFaction { Faction = f, Planet = p1, Influence = 0};
+                    p1.PlanetFactions.Add(cEntry);
+                }
+                if (cEntry.Influence != GlobalConst.PlanetWarsMaximumIP)
+                {
+                    cEntry.Influence = GlobalConst.PlanetWarsMaximumIP;
+                    if (newControlled > 0) { controlReport += ", "; }
+                    controlReport += p1.Name;
+                    newControlled++;
+                }
+            }
+        }
+        if (newControlled > 0)
+        {
+            controlReport = "Planets automatically controlled: " + controlReport + ".";
+        }
+
+        // Update actual *control* of all planets
+        PlanetWarsTurnHandler.SetPlanetOwners(eventCreator, db, sb);
+
+        try
+        {
+            if (planetConquered)
+            {
+                influenceReport = String.Format("{0} conquered the planet, gained {1} influence ({2}% {3} of {4})",
+                        winningFaction.Shortcut,
+                            influenceChange,
+                            (int)(ipMultiplier * 100.0),
+                            ipReason,
+                            baseInfluence + " base");
+            }
+            else
+            {
+                if (reducedEnemyInfluence)
+                    influenceReport = String.Format("{0} reduced influence of {1} by {2} ({3}% {4} of {5}); {6} has {7} influence remaining on {8}",
+                        winningFaction.Shortcut,
+                        (losingFaction == null) ? "opposing faction" : losingFaction.Shortcut,
+                        influenceChange,
+                        (int)(ipMultiplier * 100.0),
+                        ipReason,
+                        baseInfluence + " base",
+                        entry.Faction,
+                        entry.Influence,
+                        entry.Planet);
+                else
+                {
+                    if (flippedDominance)
+                    {
+                        influenceReport = String.Format("{0} took dominance from {1} and gained {2} influence ({3}% {4} of {5}); {6} now has {7} influence on {8}",
+                            winningFaction.Shortcut,
+                            (losingFaction == null) ? "opposing faction" : losingFaction.Shortcut,
+                            influenceChange,
+                            (int)(ipMultiplier * 100.0),
+                            ipReason,
+                            baseInfluence + " base",
+                            entry.Faction,
+                            entry.Influence,
+                            entry.Planet);
+                    }
+                    else
+                    {
+                        influenceReport = String.Format("{0} gained {1} influence ({2}% {3} of {4}); {5} now has {6} influence on {7} ",
+                            winningFaction.Shortcut,
+                            influenceChange,
+                            (int)(ipMultiplier * 100.0),
+                            ipReason,
+                            baseInfluence + " base",
+                            entry.Faction,
+                            entry.Influence,
+                            entry.Planet);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceError(ex.ToString());
+        }
+
+        // paranoia!
+        try
+        {
+            var mainEvent = eventCreator.CreateEvent("{0} defeated {1} on {2} in {3}. {4}. {5} {6}",
+                winningFaction,
+                (losingFaction == null) ? "opposing faction" : losingFaction.Shortcut,
+                planet,
+                (sb == null) ? "no battle" : string.Format("B{0}", sb.SpringBattleID),
+                influenceReport,
+                contestReport,
+                controlReport
+                );
+            db.Events.InsertOnSubmit(mainEvent);
+            text.AppendLine(mainEvent.PlainText);
+
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceError(ex.ToString());
+        }
+
+        db.SaveChanges();
+
+        /*gal.Turn++;
+        db.SaveChanges();
+
+        db = new ZkDataContext(); // is this needed - attempt to fix setplanetownersbeing buggy
+        SetPlanetOwners(eventCreator, db, sb != null ? db.SpringBattles.Find(sb.SpringBattleID) : null);
+        gal = db.Galaxies.Single(x => x.IsDefault);*/
+    }
+
+    public static void UpdateEconomy(ZkDataContext db, IPlanetwarsEventCreator eventCreator)
+    {
+        Galaxy gal = db.Galaxies.Single(x => x.IsDefault);
+
+        // process faction energies
+        foreach (var fac in db.Factions.Where(x => !x.IsDeleted)) fac.ProcessEnergy(gal.Turn);
+
+        // process production (incl. victory points)
+        gal.ProcessProduction();
+        db.SaveChanges();
+
+        var vpFacs = db.Factions.Where(x => x.VictoryPoints > 0);
+        if (vpFacs.Count() > 1)
+            foreach (var fac in vpFacs) fac.VictoryPoints -= Math.Min(fac.VictoryPoints, GlobalConst.VictoryPointDecay);
+
+        // delete one time activated structures
+        gal.DeleteOneTimeActivated(eventCreator, db);
+        db.SaveChanges();
+
+        // burn extra energy
+        foreach (var fac in db.Factions.Where(x => !x.IsDeleted)) fac.ConvertExcessEnergyToMetal();
+
+        gal.Turn++;
+        db.SaveChanges();
+    }
+
     public static void EndTurn(string mapName, List<string> extraData, ZkDataContext db, int? winNum, List<Account> players, StringBuilder text, SpringBattle sb, List<Account> attackers, IPlanetwarsEventCreator eventCreator, ZkLobbyServer.ZkLobbyServer server)
     {
         if (extraData == null) extraData = new List<string>();
@@ -55,14 +379,19 @@ public static class PlanetWarsTurnHandler
         var evacuatedStructureTypeIDs = GetEvacuatedStructureTypes(extraData, db);
 
         string influenceReport = "";
-
+         
         // distribute influence
         // save influence gains
         // give influence to main attackers
         double planetIpDefs = planet.GetEffectiveIpDefense();
 
         double baseInfluence = GlobalConst.BaseInfluencePerBattle;
-        double influence = baseInfluence;
+        double influenceChange = baseInfluence;
+        double loserInfluence = 0;
+        Faction loserFaction = attacker; // TODO make this less awful
+        bool reducedEnemyInfluence = false;
+        bool flippedDominance = false;
+        bool planetConquered = false;
 
         double shipBonus = planet.GetEffectiveShipIpBonus(attacker);
 
@@ -96,56 +425,114 @@ public static class PlanetWarsTurnHandler
             }
         }
 
-        influence = (influence + shipBonus + techBonus + defenseBonus) * ipMultiplier;
-        if (influence < 0) influence = 0;
-        influence = Math.Floor(influence * 100) / 100;
+        influenceChange = (influenceChange + shipBonus + techBonus + defenseBonus) * ipMultiplier;
+        if (influenceChange < 0) influenceChange = 0;
+        influenceChange = Math.Floor(influenceChange * 100) / 100;
 
         // main winner influence 
-        PlanetFaction entry = planet.PlanetFactions.FirstOrDefault(x => x.Faction == attacker);
+        // PlanetFaction entry = planet.PlanetFactions.FirstOrDefault(x => x.Faction == attacker);
+        PlanetFaction entry = planet.PlanetFactions.FirstOrDefault();
         if (entry == null)
         {
             entry = new PlanetFaction { Faction = attacker, Planet = planet, };
             planet.PlanetFactions.Add(entry);
         }
-
-        entry.Influence += influence;
-
-
-        // clamping of influence
-        // gained over 100, sole owner
-        if (entry.Influence >= GlobalConst.PlanetWarsMaximumIP)
+        // if non-winner currently dominates planet
+        if (entry.Faction != attacker)
         {
-            entry.Influence = GlobalConst.PlanetWarsMaximumIP;
-            foreach (var pf in planet.PlanetFactions.Where(x => x.Faction != attacker)) pf.Influence = 0;
-        }
-        else
-        {
-            var sumOthers = planet.PlanetFactions.Where(x => x.Faction != attacker).Sum(x => (double?)x.Influence) ?? 0;
-            if (sumOthers + entry.Influence > GlobalConst.PlanetWarsMaximumIP)
+            loserFaction = entry.Faction;
+            loserInfluence = entry.Influence;
+
+            // if win is insufficient to change this
+            if (loserInfluence >= influenceChange)
             {
-                var excess = sumOthers + entry.Influence - GlobalConst.PlanetWarsMaximumIP;
-                foreach (var pf in planet.PlanetFactions.Where(x => x.Faction != attacker)) pf.Influence -= pf.Influence / sumOthers * excess;
+                reducedEnemyInfluence = true;
+                entry.Influence -= influenceChange;
+            }
+            else // flip dominance
+            {
+                flippedDominance = true;
+                planet.PlanetFactions.Remove(entry);
+                entry = new PlanetFaction { Faction = attacker, Planet = planet, };
+                planet.PlanetFactions.Add(entry);
+                entry.Influence += (influenceChange - loserInfluence);
+
+                if (entry.Influence >= GlobalConst.PlanetWarsMaximumIP)
+                {
+                    entry.Influence = GlobalConst.PlanetWarsMaximumIP;
+                    planetConquered = true;
+                }
             }
         }
+        else // increase winner's existing dominance
+        {
+            if (entry.Influence < GlobalConst.PlanetWarsMaximumIP)
+            {
+                entry.Influence += influenceChange;
+                if (entry.Influence >= GlobalConst.PlanetWarsMaximumIP)
+                {
+                    entry.Influence = GlobalConst.PlanetWarsMaximumIP;
+                    planetConquered = true;
+                }
+            }
+        }
+
+        // TODO remove dependence on attacker
+
+        if (planetConquered)
+        {
+            // Contest Adjacent Planets
+            // GlobalConst.PlanetWarsBreakthroughIP
+        }
+
+        // Check all planets to see if they are contested by a single faction
+
         try
         {
-            influenceReport = String.Format("{0} gained {1} influence ({2}% {3} of {4}{5}{6}{7})",
-                attacker.Shortcut,
-                influence,
-                (int)(ipMultiplier * 100.0),
-                ipReason,
-                baseInfluence + " base",
-                techBonus > 0 ? " +" + techBonus + " from techs" : "",
-                shipBonus > 0 ? " +" + shipBonus + " from dropships" : "",
-                defenseBonus != 0 ? " -" + -defenseBonus + " from defenses" : "");
+            if (reducedEnemyInfluence)
+                influenceReport = String.Format("{0} reduced influence of {1} by {2} ({3}% {4} of {5}{6}{7}{8})",
+                    attacker.Shortcut,
+                    loserFaction.Shortcut,
+                    influenceChange,
+                    (int)(ipMultiplier * 100.0),
+                    ipReason,
+                    baseInfluence + " base",
+                    techBonus > 0 ? " +" + techBonus + " from techs" : "",
+                    shipBonus > 0 ? " +" + shipBonus + " from dropships" : "",
+                    defenseBonus != 0 ? " -" + -defenseBonus + " from defenses" : "");
+            else
+            {
+                if (flippedDominance)
+                {
+                    influenceReport = String.Format("{0} took dominance from {1} and gained {2} influence ({3}% {4} of {5}{6}{7}{8})",
+                        attacker.Shortcut,
+                        loserFaction.Shortcut,
+                        influenceChange - loserInfluence,
+                        (int)(ipMultiplier * 100.0),
+                        ipReason,
+                        baseInfluence + " base",
+                        techBonus > 0 ? " +" + techBonus + " from techs" : "",
+                        shipBonus > 0 ? " +" + shipBonus + " from dropships" : "",
+                        defenseBonus != 0 ? " -" + -defenseBonus + " from defenses" : "");
+                }
+                else
+                {
+                    influenceReport = String.Format("{0} gained {1} influence ({2}% {3} of {4}{5}{6}{7})",
+                        attacker.Shortcut,
+                        influenceChange,
+                        (int)(ipMultiplier * 100.0),
+                        ipReason,
+                        baseInfluence + " base",
+                        techBonus > 0 ? " +" + techBonus + " from techs" : "",
+                        shipBonus > 0 ? " +" + shipBonus + " from dropships" : "",
+                        defenseBonus != 0 ? " -" + -defenseBonus + " from defenses" : "");
+                }
+            }
         }
         catch (Exception ex)
         {
             Trace.TraceError(ex.ToString());
         }
-
-
-
 
         // distribute metal
         var attackersTotalMetal = CalculateFactionMetalGain(planet, hqStructure, attacker, GlobalConst.PlanetWarsAttackerMetal, eventCreator, db, text, sb);
@@ -308,8 +695,9 @@ public static class PlanetWarsTurnHandler
 
         db.SaveChanges();
 
-        gal.DecayInfluence();
-        gal.SpreadInfluence();
+        // no longer used?
+        //gal.DecayInfluence();
+        //gal.SpreadInfluence();
 
         // process faction energies
         foreach (var fac in db.Factions.Where(x => !x.IsDeleted)) fac.ProcessEnergy(gal.Turn);

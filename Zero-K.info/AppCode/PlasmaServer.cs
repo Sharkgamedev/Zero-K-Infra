@@ -187,7 +187,7 @@ namespace ZeroKWeb
             var newContentFile = new ResourceContentFile { FileName = archiveName, Length = length, Md5 = md5, Resource = resource};
             resource.ResourceContentFiles.Add(newContentFile);
             ResourceLinkProvider.UpdateLinks(newContentFile);
-            File.WriteAllBytes(GetTorrentPath(internalName, md5), torrentData); // add new torrent file
+            //File.WriteAllBytes(GetTorrentPath(internalName, md5), torrentData); // add new torrent file
 
             db.SaveChanges();
 
@@ -237,7 +237,7 @@ namespace ZeroKWeb
             if (minimap != null) File.WriteAllBytes(String.Format("{0}.minimap.jpg", file), minimap);
             if (metalMap != null) File.WriteAllBytes(String.Format("{0}.metalmap.jpg", file), metalMap);
             if (heightMap != null) File.WriteAllBytes(String.Format("{0}.heightmap.jpg", file), heightMap);
-            if (torrentData != null) File.WriteAllBytes(GetTorrentPath(resource.InternalName, md5), torrentData);
+            //if (torrentData != null) File.WriteAllBytes(GetTorrentPath(resource.InternalName, md5), torrentData);
             if (serializedData != null)
             {
                 File.WriteAllBytes(String.Format("{0}.metadata.xml.gz", file), serializedData);
