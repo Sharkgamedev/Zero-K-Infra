@@ -16,6 +16,8 @@ namespace ZeroKWeb
 
         public DateTime? ChallengeTime { get; set; }
 
+        public DateTime NextTurnTime { get; set; }
+
         public Dictionary<int, PlanetWarsMatchMaker.AttackOption> RunningBattles { get; set; } = new Dictionary<int, PlanetWarsMatchMaker.AttackOption>();
         public PlanetWarsMatchMakerState() { }
     }

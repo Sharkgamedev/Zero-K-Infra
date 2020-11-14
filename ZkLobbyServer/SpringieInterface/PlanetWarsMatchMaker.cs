@@ -270,6 +270,11 @@ namespace ZeroKWeb
             return AttackerSideChangeTime.AddMinutes(GlobalConst.PlanetWarsMinutesToAttack + extra);
         }
 
+        private DateTime GetTurnDeadline()
+        {
+            return NextTurnTime.AddMinutes(GlobalConst.PlanetWarsTurnMinutes);
+        }
+
         public List<Faction> GetDefendingFactions(AttackOption target)
         {
             if (target.OwnerFactionID != null)
