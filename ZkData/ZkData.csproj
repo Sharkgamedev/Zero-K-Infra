@@ -496,6 +496,14 @@
     <Compile Include="Migrations\202012201235077_AddAccountPubKey.Designer.cs">
       <DependentUpon>202012201235077_AddAccountPubKey.cs</DependentUpon>
     </Compile>
+    <Compile Include="Migrations\202101220259346_settingUpPw.cs" />
+    <Compile Include="Migrations\202101220259346_settingUpPw.Designer.cs">
+      <DependentUpon>202101220259346_settingUpPw.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Migrations\202101220306013_TestGalaxy.cs" />
+    <Compile Include="Migrations\202101220306013_TestGalaxy.Designer.cs">
+      <DependentUpon>202101220306013_TestGalaxy.cs</DependentUpon>
+    </Compile>
     <Compile Include="SpringFilesUnitsyncAttempt.cs" />
     <Compile Include="SteamWebApi.cs" />
     <Compile Include="UserLanguageNoteAttribute.cs" />
@@ -931,6 +939,12 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Migrations\202012201235077_AddAccountPubKey.resx">
       <DependentUpon>202012201235077_AddAccountPubKey.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202101220259346_settingUpPw.resx">
+      <DependentUpon>202101220259346_settingUpPw.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Include="Migrations\202101220306013_TestGalaxy.resx">
+      <DependentUpon>202101220306013_TestGalaxy.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="ZkDataResources.resx">
       <Generator>ResXFileCodeGenerator</Generator>

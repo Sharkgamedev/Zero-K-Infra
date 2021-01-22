@@ -43,7 +43,7 @@ namespace ZkData
             switch (newMode) {
                 case ModeType.Local:
                     BaseSiteUrl = "http://localhost:9739";
-                    ZkDataContextConnectionString = @"Data Source=NEPTUNEX\SQLEXPRESS;Initial Catalog=zero-k_local;Integrated Security=True;MultipleActiveResultSets=true;Min Pool Size=5;Max Pool Size=2000";
+                    ZkDataContextConnectionString = @"Data Source=The-Beast; Integrated Security=True; Database=zero-k_local;";
 
                     LobbyServerHost = "localhost";
                     LobbyServerPort = 8200;
